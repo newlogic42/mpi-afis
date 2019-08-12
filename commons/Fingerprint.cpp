@@ -79,7 +79,6 @@ Fingerprint& Fingerprint::operator=(const Fingerprint& other)
 	return *this;
 }
 
-
 Fingerprint::Fingerprint(const Matrix<int> &xyt, const string &identifier) :
 id(identifier),
 minutiae(),
@@ -229,6 +228,7 @@ int Fingerprint::readNIGOSfile(const string & name, unsigned int quality)
 		return readBinaryFile(basename + ".brw");
 }
 
+
 void Fingerprint::clear(){
 	minutiae.clear();
 	distanceMatrix.clear();
@@ -299,6 +299,41 @@ int Fingerprint::readXYTFile(const string &name, unsigned int quality){
 
 		return -1;
 	}
+}
+
+int Fingerprint::readXYTBuffer(const string &data, unsigned int quality){
+  std::istringstream data_buffer(data);
+  string delim = ".";
+	string buffer;
+
+	int X,Y;
+	int Tx;
+	unsigned int Qxyt;
+	Minutia newM;
+
+	clear();
+	//id = '';
+	int i = 0;
+	int last = 0;
+	while ((i = data.find(delim, last)) != string::npos)
+	  {
+	    buffer = data.substr(last, i - last);
+	    sscanf (buffer.c_str(), "%d %d %d %d", &X, &Y, &Tx, &Qxyt);
+	    if(Qxyt >= quality || Qxyt == 0)
+	    {
+	      newM.setIndex(i);
+	      newM.setX(X);
+	      newM.setY(Y);
+	      newM.setT(Tx*2);
+	      newM.setQuality(Qxyt);
+	      newM.setType(OTH);
+	      
+	      addMinutia(newM);
+	    }
+	    last = i+1;
+	  }
+
+	return 0;
 }
 
 int Fingerprint::readMinutaeNIGOSfile(const string &name, unsigned int quality){
@@ -413,6 +448,131 @@ int Fingerprint::read19794file(const string & path, unsigned int quality)
 	return 0;
 }
 
+
+int Fingerprint::read19794buffer(const char * buffer, unsigned int quality)
+{
+
+  // from index 12:
+  // 12-13: capture equipments
+  // 14-15: width, 16-17: height
+  // 18-19: DPI on x-axis, 20-21: DPI on y-axis
+  // 22: number of fingers on the iso
+  // 23: block reserved
+  // 24: finger position
+  // 25: view impression
+  // 26: fingerprint quality
+  // 27: number of minutiae
+	unsigned int num_minutiae    = static_cast<unsigned char>(buffer[27]);
+	typeMin type_min;
+
+	/********** READ MINUTIAE ***********/
+	// Begin from block 28
+	char *memblock = new char[6*num_minutiae + 2];
+	for (int k=0; k<6*num_minutiae + 2; k++) {
+	  memblock[k] = buffer[28+k];  
+	}
+// 	minutiae.resize(num_minutiae);
+//	minutiae.clear();
+	clear();
+	for (unsigned int i = 0, desp = 0; i < num_minutiae; ++i, desp+=6)
+	{
+		unsigned int coordX, coordY;
+		unsigned char min_type = (memblock[desp] & 0xC0) >> 6;
+		float angle = 0;
+		unsigned int Q;
+
+		Minutia newmin;
+
+		Q = (unsigned char)memblock[5 + desp];
+
+		if(Q >= quality || Q == 0)
+		{
+			if(min_type == 0x1)
+				type_min = RIG;
+			else if(min_type == 0x2)
+				type_min = BIF;
+			else
+			{
+// 				fprintf(stderr, "Fingerprint file %s: skipping minutia number %d of type OTHER (memblock: %x   min_type: %x)\n", id.c_str(), i, memblock[desp], min_type);
+// 				continue;
+				type_min = OTH;
+			}
+
+			coordX = ((unsigned int)(memblock[    desp] & 0x3F) << 8) + (unsigned char)memblock[1 + desp];
+			coordY = ((unsigned int)(memblock[2 + desp] & 0x3F) << 8) + (unsigned char)memblock[3 + desp];
+
+			angle = (unsigned char)memblock[4 + desp] * 1.40625;
+
+			newmin.setIndex  (i);
+			newmin.setX      (coordX);
+			newmin.setY      (coordY);
+			newmin.setType   (type_min);
+			newmin.setT      (angle);
+			newmin.setQuality(Q);
+
+			addMinutia(newmin);
+			//minutiae.push_back(newmin);
+
+			//cout << coordX << " " << coordY << " " << roundInt(angle) << " " << Q << endl;
+		}
+	}
+
+	// ext_data_length = getShortInt(memblock[6*num_minutiae], memblock[6*num_minutiae+1]);
+
+	delete [] memblock;
+
+	// Legacy from the old implementation. May be useful later...
+	// if(ext_data_length > 0)
+	// {
+	// 	memblock = new char[ext_data_length];
+
+	// 	/********** READ EXTENDED DATA INFO ***********/
+	// // 	bFile.seekg (28 + 6*num_minutiae + 2, ios::beg);
+	// 	bFile.read (memblock, ext_data_length);
+
+	// 	// This variable counts the number of read bytes in the extended area
+	// 	edl_sum = 0;
+	// 	ext_data_info.clear();
+
+	// 	while(edl_sum < ext_data_length)
+	// 	{
+	// 		edai.type =   getExtendedRecordType(memblock[ext_data_info.size()*4  ], memblock[ext_data_info.size()*4+1]);
+	// 		edai.length = getShortInt          (memblock[ext_data_info.size()*4+2], memblock[ext_data_info.size()*4+3]);
+	// 		ext_data_info.push_back(edai);
+
+	// 		edl_sum += edai.length + 4;
+	// 	}
+
+	// 	edl_sum = ext_data_info.size()*4;
+
+	// 	for(unsigned int i = 0; i < ext_data_info.size(); i++)
+	// 	{
+	// 		switch(ext_data_info[i].type)
+	// 		{
+	// 			case RESERVED:
+	// 				cerr << "WARNING: the fingerprint file " << id << " has an extended area with a reserved code" << endl;
+	// 			break;
+	// 			case RIDGECOUNT:
+	// 			break;
+	// 			case COREDELTA:
+	// 			break;
+	// 			case ZONALQUALITY:
+	// 			break;
+	// 			case CLASS:
+	// 				fpclass = readEAClass(memblock+edl_sum, ext_data_info[i].length);
+	// 			break;
+	// 			case VENDORDEFINED:
+	// 				cerr << "WARNING: the fingerprint file " << id << " has an extended area with a vendor-defined code" << endl;
+	// 			break;
+	// 		}
+
+	// 		edl_sum += ext_data_info[i].length;
+	// 	}
+
+	// delete [] memblock;
+	// }
+	return 0;
+}
 
 void Fingerprint::computeDistances(){
 

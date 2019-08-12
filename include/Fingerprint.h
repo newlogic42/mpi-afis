@@ -35,19 +35,19 @@ class Fingerprint
 
 		/** Default destructor */
 		virtual ~Fingerprint();
-		
+
 		/**
-		 * Copy constructor
-		 * \param other Object to copy from
-		 */
+			* Copy constructor
+			* \param other Object to copy from
+			*/
 		Fingerprint(const Fingerprint& other);
-		
-		/** Constructor to load the minutiae of a fingerprint
+
+  /** Constructor to load the minutiae of a fingerprint
 		 * \param xyt Matrix containing 1 row per minutia, and 3 columns (X, Y and T). The quality is set to 100, and the type to "other".
 		 * \param identifier Optional name for the fingerprint
 		 */
 		Fingerprint(const Matrix<int> &xyt, const std::string &identifier = "");
-
+  
 		/**
 			* Assignment operator
 			* \param other Object to assign from
@@ -287,6 +287,13 @@ class Fingerprint
 			*/
 		int readXYTFile(const std::string & name, unsigned int quality = 0);
 
+  /**
+			* Read a data buffer of XYT format. It requires the string data.
+			* \param name String with the data in XYT format
+			* \param quality Minimum quality for the read minutiae
+			* \return -1 if an error has ocurred. 0 otherwise
+			*/
+		int readXYTBuffer(const std::string & data, unsigned int quality = 0);
 		/**
 			* Read a data file in NIGOS format. It requires the .xyt and .min file.
 			* \param name String with the file base name (without extensions)
@@ -301,7 +308,13 @@ class Fingerprint
 			* \return A negative integer if an error has ocurred. 0 otherwise
 			*/
 		int read19794file(const std::string & name, unsigned int quality = 0);
-				
+
+  /**
+			* Read a buffer in 19794-2 format. It requires a single binary buffer. Currently support 2005 version
+			* \param name String with the file name (with extension)
+			* \return A negative integer if an error has ocurred. 0 otherwise
+			*/
+		int read19794buffer(const char * buffer, unsigned int quality = 0);
 		/**
 			* Compute the distance matrix for all minutiae
 			*/
